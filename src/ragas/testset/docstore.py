@@ -16,7 +16,7 @@ from langchain_core.pydantic_v1 import Field
 from loguru import logger
 from ragas.embeddings.base import BaseRagasEmbeddings
 from ragas.exceptions import ExceptionInRunner
-from ragas.executor import Executor
+from ragas.executor import Executor, MainThreadExecutor
 from ragas.run_config import RunConfig
 from ragas.testset.utils import rng
 
