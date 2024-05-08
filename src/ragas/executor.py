@@ -169,7 +169,7 @@ class MainThreadRunner:
     raise_exceptions: bool = True
     run_config: t.Optional[RunConfig] = None
 
-    def _main_thread_as_completed(self, coros: List[Coroutine], max_workers: int) -> asyncio.as_completed:
+    def _main_thread_as_completed(self, coros: t.List[t.Coroutine], max_workers: int) -> asyncio.as_completed:
         """
         This function returns an iterator that yields futures as they complete.
         If max_workers is -1, it returns all the coroutines as they complete.
@@ -189,7 +189,7 @@ class MainThreadRunner:
 
         semaphore = asyncio.Semaphore(max_workers)
 
-        async def sema_coro(coro: Coroutine) -> Any:
+        async def sema_coro(coro: t.Coroutine) -> t.Any:
             """
             This is an internal coroutine function that runs the given coroutine
             while acquiring the semaphore.
