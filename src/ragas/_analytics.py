@@ -18,7 +18,7 @@ if t.TYPE_CHECKING:
     T = t.TypeVar("T")
     AsyncFunc = t.Callable[P, t.Coroutine[t.Any, t.Any, t.Any]]
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 USAGE_TRACKING_URL = "https://t.explodinggradients.com"

@@ -21,7 +21,7 @@ if t.TYPE_CHECKING:
     from ragas.testset.docstore import Node
 
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 @dataclass

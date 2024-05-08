@@ -7,7 +7,7 @@ from datasets import Dataset, Sequence
 from ragas.metrics._context_precision import ContextPrecision
 from ragas.metrics.base import EvaluationMode, Metric
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 def remap_column_names(dataset: Dataset, column_map: dict[str, str]) -> Dataset:

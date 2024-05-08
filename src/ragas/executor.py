@@ -13,7 +13,7 @@ from tqdm.auto import tqdm
 from ragas.exceptions import MaxRetriesExceeded
 from ragas.run_config import RunConfig
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 def runner_exception_hook(args: threading.ExceptHookArgs):

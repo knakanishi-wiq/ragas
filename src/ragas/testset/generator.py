@@ -36,7 +36,7 @@ if t.TYPE_CHECKING:
     from langchain_core.documents import Document as LCDocument
     from llama_index.core.schema import Document as LlamaindexDocument
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 Distributions = t.Dict[t.Any, float]
 DEFAULT_DISTRIBUTION = {simple: 0.5, reasoning: 0.25, multi_context: 0.25}

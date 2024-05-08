@@ -27,7 +27,7 @@ from ragas.testset.prompts import (
 )
 from ragas.testset.utils import rng
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 @dataclass
