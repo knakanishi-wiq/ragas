@@ -37,9 +37,7 @@ class Document(LCDocument):
         if filename is not None:
             filename = self.metadata["filename"]
         else:
-            logger.info(
-                "Document [ID: %s] has no filename, using `doc_id` instead", self.doc_id
-            )
+            logger.info(f"Document [ID: {self.doc_id}] has no filename, using `doc_id` instead")
             filename = self.doc_id
 
         return filename

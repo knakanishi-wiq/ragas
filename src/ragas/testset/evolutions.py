@@ -113,7 +113,7 @@ class Evolution:
     ) -> EvolutionOutput:
         if update_count:
             current_tries += 1
-        logger.info("retrying evolution: %s times", current_tries)
+        logger.info(f"retrying evolution: {current_tries} times")
         if current_tries > self.max_tries:
             # TODO: make this into a custom exception
             raise MaxRetriesExceeded(self)
@@ -228,7 +228,7 @@ class Evolution:
             results.generations[0][0].text.strip(), self.generator_llm
         )
         answer = answer if isinstance(answer, dict) else {}
-        logger.debug("answer generated: %s", answer)
+        logger.debug(f"answer generated: {answer}")
         answer = (
             np.nan if answer.get("verdict") == "-1" else answer.get("answer", np.nan)
         )
@@ -294,7 +294,7 @@ class SimpleEvolution(Evolution):
                 current_tries, current_nodes, update_count=False
             )
 
-        logger.debug("keyphrases in merged node: %s", merged_node.keyphrases)
+        logger.debug(f"keyphrases in merged node: {merged_node.keyphrases}")
         results = await self.generator_llm.generate(
             prompt=self.seed_question_prompt.format(
                 context=merged_node.page_content,
@@ -302,7 +302,7 @@ class SimpleEvolution(Evolution):
             )
         )
         seed_question = results.generations[0][0].text
-        logger.info("seed question generated: %s", seed_question)
+        logger.info(f"seed question generated: {seed_question}")
         is_valid_question, feedback = await self.question_filter.filter(seed_question)
 
         if not is_valid_question:
@@ -310,7 +310,7 @@ class SimpleEvolution(Evolution):
             seed_question, current_nodes = await self.fix_invalid_question(
                 seed_question, current_nodes, feedback
             )
-            logger.info("rewritten question: %s", seed_question)
+            logger.info(f"rewritten question: {seed_question}")
             is_valid_question, _ = await self.question_filter.filter(seed_question)
             if not is_valid_question:
                 # retry with new nodes added
@@ -373,11 +373,7 @@ class ComplexEvolution(Evolution):
         simple_question, current_nodes, _ = await self.se._aevolve(
             current_tries, current_nodes
         )
-        logger.debug(
-            "[%s] simple question generated: %s",
-            self.__class__.__name__,
-            simple_question,
-        )
+        logger.debug(f"[{self.__class__.__name__}] simple question generated: {simple_question}")
 
         merged_node = self.merge_nodes(current_nodes)
         result = await self.generator_llm.generate(
@@ -394,7 +390,7 @@ class ComplexEvolution(Evolution):
             reasoning_question, current_nodes = await self.fix_invalid_question(
                 reasoning_question, current_nodes, feedback
             )
-            logger.info("rewritten question: %s", reasoning_question)
+            logger.info(f"rewritten question: {reasoning_question}")
             is_valid_question, _ = await self.question_filter.filter(reasoning_question)
             if not is_valid_question:
                 # retry with new nodes added
@@ -405,19 +401,13 @@ class ComplexEvolution(Evolution):
         compressed_question = await self._transform_question(
             prompt=self.compress_question_prompt, question=reasoning_question
         )
-        logger.debug(
-            "[%s] question compressed: %s",
-            self.__class__.__name__,
-            reasoning_question,
-        )
+        logger.debug(f"[{self.__class__.__name__}] question compressed: {reasoning_question}")
 
         assert self.evolution_filter is not None, "evolution filter cannot be None"
         if await self.evolution_filter.filter(simple_question, compressed_question):
             # retry
             current_nodes = self.se._get_new_random_node()
-            logger.debug(
-                "evolution_filter failed, retrying with %s", len(current_nodes.nodes)
-            )
+            logger.debug(f"evolution_filter failed, retrying with {len(current_nodes.nodes)}")
             return await self.aretry_evolve(current_tries, current_nodes)
 
         return compressed_question, current_nodes
@@ -460,9 +450,7 @@ class MultiContextEvolution(ComplexEvolution):
         simple_question, current_nodes, _ = await self.se._aevolve(
             current_tries, current_nodes
         )
-        logger.debug(
-            "[MultiContextEvolution] simple question generated: %s", simple_question
-        )
+        logger.debug(f"[MultiContextEvolution] simple question generated: {simple_question}")
         # find a similar node and generate a question based on both
         merged_node = self.merge_nodes(current_nodes)
         similar_node = self.docstore.get_similar(merged_node, top_k=1)
@@ -484,9 +472,7 @@ class MultiContextEvolution(ComplexEvolution):
         )
         results = await self.generator_llm.generate(prompt=prompt)
         question = results.generations[0][0].text.strip()
-        logger.debug(
-            "[MultiContextEvolution] multicontext question generated: %s", question
-        )
+        logger.debug(f"[MultiContextEvolution] multicontext question generated: {question}")
         is_valid_question, feedback = await self.question_filter.filter(question)
         if not is_valid_question:
             # retry
@@ -494,7 +480,7 @@ class MultiContextEvolution(ComplexEvolution):
             question, current_nodes = await self.fix_invalid_question(
                 question, current_nodes, feedback
             )
-            logger.info("rewritten question: %s", question)
+            logger.info(f"rewritten question: {question}")
             is_valid_question, _ = await self.question_filter.filter(question)
 
             if not is_valid_question:
@@ -506,10 +492,7 @@ class MultiContextEvolution(ComplexEvolution):
         compressed_question = await self._transform_question(
             prompt=self.compress_question_prompt, question=question
         )
-        logger.debug(
-            "[MultiContextEvolution] multicontext question compressed: %s",
-            compressed_question,
-        )
+        logger.debug("[MultiContextEvolution] multicontext question compressed: {compressed_question}")
 
         assert self.evolution_filter is not None, "evolution filter cannot be None"
         if await self.evolution_filter.filter(simple_question, compressed_question):

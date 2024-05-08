@@ -51,14 +51,12 @@ def silent(func: t.Callable[P, T]) -> t.Callable[P, T]:  # pragma: no cover
         except Exception as err:  # pylint: disable=broad-except
             if _usage_event_debugging():
                 if get_debug_mode():
-                    logger.error(
-                        "Tracking Error: %s", err, stack_info=True, stacklevel=3
-                    )
+                    logger.error(f"Tracking Error: {err}", stack_info=True, stacklevel=3)
                     raise err
                 else:
-                    logger.info("Tracking Error: %s", err)
+                    logger.info(f"Tracking Error: {err}")
             else:
-                logger.debug("Tracking Error: %s", err)
+                logger.debug(f"Tracking Error: {err}")
 
     return wrapper
 
@@ -105,7 +103,7 @@ def track(event_properties: BaseEvent):
     payload = dict(event_properties)
     if _usage_event_debugging():
         # For internal debugging purpose
-        logger.info("Tracking Payload: %s", payload)
+        logger.info(f"Tracking Payload: {payload}")
         return
 
     requests.post(USAGE_TRACKING_URL, json=payload, timeout=USAGE_REQUESTS_TIMEOUT_SEC)

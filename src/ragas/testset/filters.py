@@ -58,7 +58,7 @@ class NodeFilter(Filter):
         output = await context_scoring_parser.aparse(output, prompt, self.llm)
         output = output.dict() if output is not None else {}
         output["score"] = sum(output.values()) / len(output.values())
-        logger.debug("context scoring: %s", output)
+        logger.debug(f"context scoring: {output}")
         output.update({"score": output.get("score", 0) >= self.threshold})
         return output
 
@@ -90,7 +90,7 @@ class QuestionFilter(Filter):
         results = results.generations[0][0].text.strip()
         results = await question_filter_parser.aparse(results, prompt, self.llm)
         results = results.dict() if results is not None else {}
-        logger.debug("filtered question: %s", results)
+        logger.debug(f"filtered question: {results}")
         return results.get("verdict") == 1, results.get("feedback", "")
 
     def adapt(self, language: str, cache_dir: t.Optional[str] = None) -> None:
@@ -123,7 +123,7 @@ class EvolutionFilter(Filter):
         results = results.generations[0][0].text.strip()
         results = await evolution_elimination_parser.aparse(results, prompt, self.llm)
         results = results.dict() if results is not None else {}
-        logger.debug("evolution filter: %s", results)
+        logger.debug(f"evolution filter: {results}")
         return results.get("verdict") == 1
 
     def adapt(self, language: str, cache_dir: t.Optional[str] = None) -> None:
