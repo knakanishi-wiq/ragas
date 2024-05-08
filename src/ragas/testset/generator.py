@@ -15,10 +15,10 @@ from langchain_openai.embeddings import OpenAIEmbeddings
 from ragas._analytics import TestsetGenerationEvent, track
 from ragas.embeddings.base import BaseRagasEmbeddings, LangchainEmbeddingsWrapper
 from ragas.exceptions import ExceptionInRunner
-from ragas.executor import Executor
+from ragas.executor import Executor, MainThreadExecutor
 from ragas.llms import BaseRagasLLM, LangchainLLMWrapper
 from ragas.run_config import RunConfig
-from ragas.testset.docstore import Document, DocumentStore, InMemoryDocumentStore
+from ragas.testset.docstore import Document, DocumentStore, InMemoryDocumentStore, AsyncInMemoryDocumentStore
 from ragas.testset.evolutions import (
     ComplexEvolution,
     CurrentNodes,
@@ -63,7 +63,6 @@ class TestDataset:
 
     def to_dataset(self) -> Dataset:
         return Dataset.from_list(self._to_records())
-
 
 @dataclass
 class TestsetGenerator:
@@ -330,3 +329,176 @@ class TestsetGenerator:
                     evolution.evolution_filter is not None
                 ), "EvolutionFilter is not set"
             evolution.save(cache_dir=cache_dir)
+
+
+class WXTestsetGenerator(TestsetGenerator):
+    """
+    A custom testset generator that overrides the following methods to work with the MainThreadExecutor class:
+        from_langchain: Initializes a new instance of the WXTestsetGenerator class.
+        generate: Generates the test set based on the given parameters.
+
+    Methods:
+        from_langchain: Initializes a new instance of the WXTestsetGenerator class.
+        generate: Generates the test set based on the given parameters.
+    """
+
+    @classmethod
+    def from_langchain(
+        cls,
+        generator_llm: BaseLanguageModel,
+        critic_llm: BaseLanguageModel,
+        embeddings: Embeddings,
+        docstore: t.Optional[DocumentStore] = None,
+        run_config: t.Optional[RunConfig] = None,
+        chunk_size: int = 1024,
+    ) -> "WXTestsetGenerator":
+        """
+        Initializes a new instance of the WXTestsetGenerator class.
+
+        Args:
+            generator_llm (BaseLanguageModel): The generator language model.
+            critic_llm (BaseLanguageModel): The critic language model.
+            embeddings (Embeddings): The embeddings to be used.
+            docstore (t.Optional[DocumentStore]): The document store to be used. If None, a new AsyncInMemoryDocumentStore will be created.
+            run_config (t.Optional[RunConfig]): The run configuration to be used. If None, a default RunConfig will be used.
+            chunk_size (int): The size of the chunks to be used in the TokenTextSplitter.
+
+        Returns:
+            WXTestsetGenerator: A new instance of the WXTestsetGenerator class.
+        """
+        generator_llm_model = LangchainLLMWrapper(generator_llm)
+        critic_llm_model = LangchainLLMWrapper(critic_llm)
+        embeddings_model = LangchainEmbeddingsWrapper(embeddings)
+        keyphrase_extractor = KeyphraseExtractor(llm=generator_llm_model)
+
+        logger.info("Creating WXTestsetGenerator from Langchain Documents")
+        logger.info(f"Using {generator_llm_model=}")
+        logger.info(f"Using {critic_llm_model=}")
+        logger.info(f"Using {embeddings_model=}")
+        logger.info(f"Using {keyphrase_extractor=}")
+
+        if docstore is None:
+            from langchain.text_splitter import TokenTextSplitter
+
+            splitter = TokenTextSplitter(chunk_size=chunk_size, chunk_overlap=0)
+            docstore = AsyncInMemoryDocumentStore(
+                splitter=splitter,
+                embeddings=embeddings_model,
+                extractor=keyphrase_extractor,
+                run_config=run_config,
+            )
+            return cls(
+                generator_llm=generator_llm_model,
+                critic_llm=critic_llm_model,
+                embeddings=embeddings_model,
+                docstore=docstore,
+            )
+        else:
+            return cls(
+                generator_llm=generator_llm_model,
+                critic_llm=critic_llm_model,
+                embeddings=embeddings_model,
+                docstore=docstore,
+            )
+
+    def generate(
+        self,
+        test_size: int,
+        distributions: t.Optional[Distributions] = None,
+        with_debugging_logs=False,
+        is_async: bool = True,
+        raise_exceptions: bool = True,
+        run_config: t.Optional[RunConfig] = None,
+    ):
+        """
+        Generates the test set based on the given parameters.
+
+        Args:
+            test_size (int):
+                The size of the test set to be generated. Specify a value ~ 20% greater than your actual target.
+                Aim to generate 2 - 3 questions per document in your knowledge corpus.
+            distributions (t.Optional[Distributions]): The distributions to be used. If None, the DEFAULT_DISTRIBUTION will be used.
+            with_debugging_logs (bool): Whether to include debugging logs.
+            is_async (bool): Whether to run the evolutions asynchronously.
+            raise_exceptions (bool): Whether to raise exceptions.
+            run_config (t.Optional[RunConfig]): The run configuration to be used. If None, a default RunConfig will be used.
+
+        Raises:
+            ValueError: If the sum of the values in the distributions is not close to 1.0.
+        """
+
+        distributions = distributions or DEFAULT_DISTRIBUTION
+        # validate distributions
+        if not check_if_sum_is_close(list(distributions.values()), 1.0, 3):
+            raise ValueError(f"distributions passed do not sum to 1.0 [got {sum(list(distributions.values()))}]. Please check the " f"distributions.")
+
+        # configure run_config for docstore
+        if run_config is None:
+            run_config = RunConfig(max_retries=15, max_wait=90)
+        self.docstore.set_run_config(run_config)
+
+        # init filters and evolutions
+        for evolution in distributions:
+            self.init_evolution(evolution)
+            evolution.init(is_async=is_async, run_config=run_config)
+
+        if with_debugging_logs:
+            from ragas.utils import patch_logger
+
+            patch_logger("ragas.testset.evolutions", logging.DEBUG)
+            patch_logger("ragas.testset.extractor", logging.DEBUG)
+            patch_logger("ragas.testset.filters", logging.DEBUG)
+            patch_logger("ragas.testset.docstore", logging.DEBUG)
+            patch_logger("ragas.llms.prompt", logging.DEBUG)
+
+        exec = MainThreadExecutor(
+            desc="Generating",
+            keep_progress_bar=True,
+            raise_exceptions=raise_exceptions,
+            run_config=run_config,
+        )
+
+        current_nodes = [CurrentNodes(root_node=n, nodes=[n]) for n in self.docstore.get_random_nodes(k=test_size)]
+        total_evolutions = 0
+        for evolution, probability in distributions.items():
+            for i in range(round(probability * test_size)):
+                exec.submit(
+                    evolution.evolve,
+                    current_nodes[i],
+                    name=f"{evolution.__class__.__name__}-{i}",
+                )
+                total_evolutions += 1
+        if total_evolutions <= test_size:
+            filler_evolutions = choices(list(distributions), k=test_size - total_evolutions)
+            for evolution in filler_evolutions:
+                exec.submit(
+                    evolution.evolve,
+                    current_nodes[total_evolutions],
+                    name=f"{evolution.__class__.__name__}-{total_evolutions}",
+                )
+                total_evolutions += 1
+
+        try:
+            test_data_rows = exec.results()
+            if not test_data_rows:
+                raise ExceptionInRunner()
+
+        except ValueError as e:
+            raise e
+        # make sure to ignore any NaNs that might have been returned
+        # due to failed evolutions. MaxRetriesExceeded is a common reason
+        test_data_rows = [r for r in test_data_rows if not is_nan(r)]
+        test_dataset = TestDataset(test_data=test_data_rows)
+        evol_lang = [get_feature_language(e) for e in distributions]
+        evol_lang = [e for e in evol_lang if e is not None]
+        track(
+            TestsetGenerationEvent(
+                event_type="testset_generation",
+                evolution_names=[e.__class__.__name__.lower() for e in distributions],
+                evolution_percentages=[distributions[e] for e in distributions],
+                num_rows=len(test_dataset.test_data),
+                language=evol_lang[0] if len(evol_lang) > 0 else "",
+            )
+        )
+
+        return test_dataset

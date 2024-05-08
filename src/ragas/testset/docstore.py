@@ -13,7 +13,7 @@ import numpy.typing as npt
 from langchain.text_splitter import TextSplitter
 from langchain_core.documents import Document as LCDocument
 from langchain_core.pydantic_v1 import Field
-
+from loguru import logger
 from ragas.embeddings.base import BaseRagasEmbeddings
 from ragas.exceptions import ExceptionInRunner
 from ragas.executor import Executor
@@ -26,8 +26,6 @@ if t.TYPE_CHECKING:
     from ragas.testset.extractor import Extractor
 
 Embedding = t.Union[t.List[float], npt.NDArray[np.float64]]
-logger = logging.getLogger(__name__)
-
 
 class Document(LCDocument):
     doc_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -356,3 +354,81 @@ class InMemoryDocumentStore(DocumentStore):
         if self.embeddings:
             self.embeddings.set_run_config(run_config)
         self.run_config = run_config
+
+
+@dataclass
+class AsyncInMemoryDocumentStore(InMemoryDocumentStore):
+    """
+    A custom document store that overrides the add_nodes method of the InMemoryDocumentStore to work with the custom ragas async executor.
+
+    Methods:
+        add_nodes(nodes: Sequence[Node], show_progress=True): Overrides the add_nodes method of the InMemoryDocumentStore.
+
+    """
+
+    def add_nodes(self, nodes: t.Sequence[Node], show_progress=True):
+        """
+        Overrides the add_nodes method of the InMemoryDocumentStore to work with the custom ragas async executor.
+
+        Args:
+            nodes (Sequence[Node]): The nodes to be added.
+            show_progress (bool): Whether to show progress. Default is True.
+
+        Raises:
+            ExceptionInRunner: If no results are returned from the executor.
+        """
+
+        assert self.embeddings is not None, "Embeddings must be set"
+        assert self.extractor is not None, "Extractor must be set"
+
+        nodes_to_embed = {}
+        nodes_to_extract = {}
+
+        # get embeddings for the docs
+        executor = MainThreadExecutor(
+            desc="embedding nodes",
+            keep_progress_bar=False,
+            raise_exceptions=True,
+            run_config=self.run_config,
+        )
+        result_idx = 0
+        for i, n in enumerate(nodes):
+            if n.embedding is None:
+                nodes_to_embed.update({i: result_idx})
+                executor.submit(
+                    self.embeddings.embed_text,
+                    n.page_content,
+                    name=f"embed_node_task[{i}]",
+                )
+                result_idx += 1
+
+            # Check if each node's keyphrases attribute has been populated. This attribute is in the form of a list.
+            # If not, then run the keyphrase extractor and assign extracted keyphrases to this attribute
+            if not n.keyphrases:
+                nodes_to_extract.update({i: result_idx})
+                executor.submit(
+                    self.extractor.extract,
+                    n,
+                    name=f"keyphrase-extraction[{i}]",
+                )
+                result_idx += 1
+
+        results = executor.results()
+        if not results:
+            raise ExceptionInRunner()
+
+        for i, n in enumerate(nodes):
+            if i in nodes_to_embed.keys():
+                n.embedding = results[nodes_to_embed[i]]
+            if i in nodes_to_extract.keys():
+                keyphrases = results[nodes_to_extract[i]]
+                n.keyphrases = keyphrases
+
+            if n.embedding is not None and n.keyphrases != []:
+                self.nodes.append(n)
+                self.node_map[n.doc_id] = n
+                assert isinstance(n.embedding, (list, np.ndarray)), "Embedding must be list or np.ndarray"
+                self.node_embeddings_list.append(n.embedding)
+
+        self.calculate_nodes_docs_similarity()
+        self.set_node_relataionships()
