@@ -113,7 +113,7 @@ class Evolution:
     ) -> EvolutionOutput:
         if update_count:
             current_tries += 1
-        logger.info(f"retrying evolution: {current_tries} times")
+        logger.debug(f"retrying evolution: {current_tries} times total")
         if current_tries > self.max_tries:
             # TODO: make this into a custom exception
             raise MaxRetriesExceeded(self)
@@ -228,7 +228,7 @@ class Evolution:
             results.generations[0][0].text.strip(), self.generator_llm
         )
         answer = answer if isinstance(answer, dict) else {}
-        logger.debug(f"answer generated: {answer}")
+        logger.info(f"answer generated: {answer}")
         answer = (
             np.nan if answer.get("verdict") == "-1" else answer.get("answer", np.nan)
         )

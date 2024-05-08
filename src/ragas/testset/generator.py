@@ -37,6 +37,7 @@ if t.TYPE_CHECKING:
     from llama_index.core.schema import Document as LlamaindexDocument
 
 from loguru import logger
+import sys
 
 Distributions = t.Dict[t.Any, float]
 DEFAULT_DISTRIBUTION = {simple: 0.5, reasoning: 0.25, multi_context: 0.25}
@@ -227,13 +228,7 @@ class TestsetGenerator:
             evolution.init(is_async=is_async, run_config=run_config)
 
         if with_debugging_logs:
-            from ragas.utils import patch_logger
-
-            patch_logger("ragas.testset.evolutions", logging.DEBUG)
-            patch_logger("ragas.testset.extractor", logging.DEBUG)
-            patch_logger("ragas.testset.filters", logging.DEBUG)
-            patch_logger("ragas.testset.docstore", logging.DEBUG)
-            patch_logger("ragas.llms.prompt", logging.DEBUG)
+            logger.warning("""with_debugging_logs is deprecated, please use loguru logger.add(sys.stderr, level="INFO")""")
 
         exec = Executor(
             desc="Generating",
