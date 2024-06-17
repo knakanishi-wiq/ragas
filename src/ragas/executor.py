@@ -17,7 +17,6 @@ from loguru import logger
 
 
 def runner_exception_hook(args: threading.ExceptHookArgs):
-    print(args)
     raise args.exc_type
 
 
