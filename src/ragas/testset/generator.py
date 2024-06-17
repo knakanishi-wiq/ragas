@@ -487,7 +487,7 @@ class WXTestsetGenerator(TestsetGenerator):
         current_nodes = [CurrentNodes(root_node=n, nodes=[n]) for n in self.docstore.get_random_nodes(k=test_size)]
         total_evolutions = 0
         for evolution, probability in distributions.items():
-            for i in range(round(probability * test_size)):
+            for i in sample(range(test_size), round(probability * test_size)):
                 exec.submit(
                     evolution.evolve,
                     current_nodes[i],
