@@ -86,6 +86,7 @@ class EvaluationEvent(BaseEvent):
     evaluation_mode: str
     num_rows: int
     language: str
+    in_ci: bool
 
 
 class TestsetGenerationEvent(BaseEvent):
