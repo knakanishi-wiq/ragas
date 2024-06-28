@@ -17,7 +17,7 @@ from ragas.embeddings.base import (
     LlamaIndexEmbeddingsWrapper,
 )
 from ragas.exceptions import ExceptionInRunner
-from ragas.executor import Executor
+from ragas.executor import Executor, MainThreadExecutor
 from ragas.llms import BaseRagasLLM, LangchainLLMWrapper, LlamaIndexLLMWrapper
 from ragas.run_config import RunConfig
 from ragas.testset.docstore import Document, DocumentStore, InMemoryDocumentStore, AsyncInMemoryDocumentStore
